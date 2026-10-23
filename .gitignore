@@ -1,0 +1,8 @@
+build/
+build-*/
+cmake-build-*/
+*.part
+.vscode/
+.idea/
+__pycache__/
+deps/

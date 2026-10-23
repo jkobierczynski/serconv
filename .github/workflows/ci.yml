@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-24.04
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # LibRaw is downloaded and built by CMake itself (cmake/LibRaw.cmake).
+      # FFmpeg is optional. Ubuntu's FFmpeg 6.1 has no ProRes RAW decoder but
+      # still tests the FFmpeg reader on MLV files; Homebrew's is current.
+      # Windows builds without it here; the release build takes it from vcpkg.
+      - name: Install FFmpeg and Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libavformat-dev libavcodec-dev libavutil-dev
+
+      - name: Install FFmpeg and Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja pkgconf ffmpeg
+
+      - name: Configure (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSERCONV_FFMPEG=ON
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -DSERCONV_FFMPEG=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Report what was built
+        shell: bash
+        run: |
+          exe=build/serconv
+          [ -f build/Release/serconv.exe ] && exe=build/Release/serconv.exe
+          "$exe" --version
+          "$exe" formats
